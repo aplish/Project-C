@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive World Map</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/topojson@3"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        #map-wrapper {
+            position: relative;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        svg#world-map {
+            width: 100%;
+            height: 600px;
+            display: block;
+            background: linear-gradient(to bottom, #e6f2ff 0%, #cce5ff 100%);
+        }
+
+        .country {
+            fill: #b3d9ff;
+            stroke: #ffffff;
+            stroke-width: 0.5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .country:hover {
+            fill: #4da6ff;
+            filter: brightness(0.9);
+            stroke-width: 1px;
+        }
+
+        .country.active {
+            fill: #ff6b6b;
+            stroke: #fff;
+            stroke-width: 1.5px;
+        }
+
+        .info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            min-width: 300px;
+            max-width: 350px;
+            z-index: 10;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+
+        .info-panel.visible {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .info-panel h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 1.3em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .info-item {
+            margin: 10px 0;
+            font-size: 14px;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .info-value {
+            color: #666;
+            margin-left: 5px;
+        }
+
+        .search-box {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+        }
+
+        .search-box input {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            width: 250px;
+            font-size: 14px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            transition: box-shadow 0.3s ease;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 20px;
+            font-size: 12px;
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 10;
+        }
+
+        .legend-item {
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border-radius: 3px;
+            border: 1px solid #ddd;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.5em;
+            }
+
+            .info-panel {
+                min-width: 250px;
+                max-width: 280px;
+                padding: 15px;
+                top: 10px;
+                right: 10px;
+            }
+
+            .search-box input {
+                width: 200px;
+            }
+
+            svg#world-map {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌍 Interactive World Map</h1>
+        
+        <div id="map-wrapper">
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Search country...">
+            </div>
+
+            <svg id="world-map"></svg>
+
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #b3d9ff;"></div>
+                    <span>Countries</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4da6ff;"></div>
+                    <span>Hover</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff6b6b;"></div>
+                    <span>Selected</span>
+                </div>
+            </div>
+
+            <div id="info-panel" class="info-panel">
+                <h3 id="region-name">Country Name</h3>
+                <div id="region-info"></div>
+            </div>
+        </div>
+
+        <div class="footer">
+            Data source: Natural Earth • Created with D3.js • Hover over countries to see information
+        </div>
+    </div>
+
+    <script>
+        // Country data (you can expand this)
+        const countryData = {
+            "United States": { population: "331M", capital: "Washington, D.C.", continent: "North America" },
+            "China": { population: "1.4B", capital: "Beijing", continent: "Asia" },
+            "India": { population: "1.4B", capital: "New Delhi", continent: "Asia" },
+            "Brazil": { population: "215M", capital: "Brasília", continent: "South America" },
+            "Russia": { population: "144M", capital: "Moscow", continent: "Europe/Asia" },
+            "Japan": { population: "125M", capital: "Tokyo", continent: "Asia" },
+            "Germany": { population: "84M", capital: "Berlin", continent: "Europe" },
+            "United Kingdom": { population: "68M", capital: "London", continent: "Europe" },
+            "France": { population: "68M", capital: "Paris", continent: "Europe" },
+            "Italy": { population: "57M", capital: "Rome", continent: "Europe" },
+            "Canada": { population: "39M", capital: "Ottawa", continent: "North America" },
+            "Spain": { population: "48M", capital: "Madrid", continent: "Europe" },
+            "Mexico": { population: "128M", capital: "Mexico City", continent: "North America" },
+            "Indonesia": { population: "277M", capital: "Jakarta", continent: "Asia" },
+            "Nigeria": { population: "223M", capital: "Abuja", continent: "Africa" },
+            "Australia": { population: "26M", capital: "Canberra", continent: "Oceania" },
+            "South Korea": { population: "52M", capital: "Seoul", continent: "Asia" },
+            "Argentina": { population: "47M", capital: "Buenos Aires", continent: "South America" },
+            "South Africa": { population: "60M", capital: "Pretoria", continent: "Africa" },
+            "Thailand": { population: "70M", capital: "Bangkok", continent: "Asia" },
+        };
+
+        let currentCountry = null;
+
+        // Load and render the world map
+        Promise.all([
+            d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
+        ]).then(([world]) => {
+            const svg = d3.select("#world-map");
+            const width = svg.node().parentElement.clientWidth;
+            const height = svg.node().parentElement.clientHeight;
+
+            // Create projection and path generator
+            const projection = d3.geoMercator()
+                .fitSize([width, height], { type: "Sphere" });
+            const path = d3.geoPath(projection);
+
+            // Convert TopoJSON to GeoJSON and render countries
+            const countries = topojson.feature(world, world.objects.countries).features;
+
+            svg.selectAll(".country")
+                .data(countries)
+                .enter()
+                .append("path")
+                .attr("class", "country")
+                .attr("d", path)
+                .attr("data-id", d => d.id)
+                .attr("data-name", d => {
+                    // Get country name from properties
+                    return d.properties?.name || `Country ${d.id}`;
+                })
+                .on("mouseenter", function(event, d) {
+                    const name = d.properties?.name || `Country ${d.id}`;
+                    const info = countryData[name];
+                    
+                    if (info) {
+                        d3.select("#region-name").text(name);
+                        d3.select("#region-info").html(`
+                            <div class="info-item">
+                                <span class="info-label">Population:</span>
+                                <span class="info-value">${info.population}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Capital:</span>
+                                <span class="info-value">${info.capital}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Continent:</span>
+                                <span class="info-value">${info.continent}</span>
+                            </div>
+                        `);
+                    } else {
+                        d3.select("#region-name").text(name);
+                        d3.select("#region-info").html(`
+                            <div class="info-item">
+                                <span class="info-value">No data available</span>
+                            </div>
+                        `);
+                    }
+
+                    d3.select("#info-panel").classed("visible", true);
+                })
+                .on("mouseleave", function() {
+                    if (currentCountry === null) {
+                        d3.select("#info-panel").classed("visible", false);
+                    }
+                })
+                .on("click", function(event, d) {
+                    const name = d.properties?.name || `Country ${d.id}`;
+                    
+                    // Remove active class from previous country
+                    svg.selectAll(".country").classed("active", false);
+                    
+                    if (currentCountry === name) {
+                        currentCountry = null;
+                        d3.select("#info-panel").classed("visible", false);
+                    } else {
+                        currentCountry = name;
+                        d3.select(this).classed("active", true);
+                    }
+                });
+
+            // Search functionality
+            d3.select("#search-input").on("input", function() {
+                const searchTerm = this.value.toLowerCase();
+                
+                svg.selectAll(".country")
+                    .style("opacity", d => {
+                        const name = (d.properties?.name || `Country ${d.id}`).toLowerCase();
+                        return name.includes(searchTerm) ? 1 : 0.2;
+                    });
+
+                if (searchTerm === "") {
+                    svg.selectAll(".country").style("opacity", 1);
+                }
+            });
+
+        }).catch(error => {
+            console.error("Error loading map data:", error);
+            d3.select("#world-map").text("Error loading map. Please refresh the page.");
+        });
+    </script>
+</body>
+</html>
